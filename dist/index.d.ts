@@ -25,4 +25,9 @@ export type TryCatchOptions<E = Error> = {
      */
     onFinally?: () => void;
 };
-export declare const tryCatch: <T, E = Error>(promise: Promise<T>, options?: TryCatchOptions<E>) => Promise<Result<T, E>>;
+export declare const tryCatch: <T, S = T, E = Error>(promise: Promise<T>, options?: TryCatchOptions<E> & {
+    /**
+     * Selector function to pick/transform the resolved data.
+     */
+    select?: (data: T) => S;
+}) => Promise<Result<S, E>>;

@@ -1,4 +1,4 @@
-# `@pidchahyi/try-catch`
+# `@pidchashyi/try-catch`
 
 > 🧰 Type-safe `try/catch` wrapper for async operations — returns structured `Result<T, E>` objects instead of throwing errors.
 
@@ -39,14 +39,19 @@ isFailure(result): result is Failure<E>;
 ### Basic Example
 
 ```ts
-import { tryCatch, isSuccess, isFailure } from "@pidchashyi/try-catch-result";
+import { tryCatch, isSuccess, isFailure } from "@pidchashyi/try-catch";
 
-const result = await tryCatch(fetchUser());
+const result = await tryCatch(
+  fetch("https://jsonplaceholder.typicode.com/users").then((res) => res.json()),
+  {
+    select: (data) => data.map((user) => user.name),
+  }
+);
 
 if (isSuccess(result)) {
-  console.log("User:", result.data);
+  console.log("User names:", result.data);
 } else {
-  console.error("Failed to fetch user:", result.error);
+  console.error("Failed to fetch user names:", result.error);
 }
 ```
 
@@ -57,8 +62,14 @@ if (isSuccess(result)) {
 ```ts
 const result = await tryCatch(fetchData(), {
   logError: true,
-  onError: (err) => reportToService(err),
-  onFinally: () => console.log("Operation complete."),
+  onError: (err) => {
+    // custom error reporting
+    reportToService(err);
+  },
+  onFinally: () => {
+    // disable loading
+    setIsLoading(false);
+  },
 });
 ```
 
@@ -68,9 +79,9 @@ const result = await tryCatch(fetchData(), {
 
 ```ts
 if (isSuccess(result)) {
-  // result.data is now typed as the successful value
+  // result.data is strongly typed and non-null
 } else if (isFailure(result)) {
-  // result.error is now typed and non-null
+  // result.error is strongly typed and non-null
 }
 ```
 
@@ -84,34 +95,35 @@ Wraps any async function or promise and returns a typed `Result<T, E>` object.
 
 #### Parameters:
 
-| Name      | Type                 | Description                      |
-| --------- | -------------------- | -------------------------------- |
-| `promise` | `Promise<T>`         | Async operation to wrap          |
-| `options` | `TryCatchOptions<E>` | Optional error/logging callbacks |
+| Name      | Type                                               | Description                     |
+| --------- | -------------------------------------------------- | ------------------------------- |
+| `promise` | `Promise<T>`                                       | Async operation to wrap         |
+| `options` | `TryCatchOptions<E> & { select?: (data: T) => S }` | Optional callbacks and selector |
 
 #### Returns:
 
 ```ts
-Promise<Result<T, E>>;
+Promise<Result<S, E>>;
 ```
 
 ---
 
 ### `TryCatchOptions<E>`
 
-| Option      | Type                 | Description                             |
-| ----------- | -------------------- | --------------------------------------- |
-| `logError`  | `boolean`            | Logs error to console if `true`         |
-| `onError`   | `(error: E) => void` | Optional custom error handler           |
-| `onFinally` | `() => void`         | Called regardless of success or failure |
+| Option      | Type                 | Description                          |
+| ----------- | -------------------- | ------------------------------------ |
+| `logError`  | `boolean`            | Logs error to console if `true`      |
+| `onError`   | `(error: E) => void` | Optional custom error handler        |
+| `onFinally` | `() => void`         | Called regardless of success/failure |
+| `select`    | `(data: T) => S`     | Selector function to transform data  |
 
 ---
 
 ## 🛡️ Safeguards & Features
 
 ✅ Fully typed `Success<T>` / `Failure<E>`
-✅ Catches `unknown` errors and casts to `Error`
-✅ Optional error logger and callbacks
+✅ Catches unknown errors and casts to `Error`
+✅ Optional error logger and lifecycle hooks
 ✅ Helps enforce non-throwing API patterns
 ❌ No global side effects
 ❌ No dependency on specific frameworks
@@ -126,4 +138,8 @@ Built with safety-first philosophy by [Pidchashyi](https://github.com/Marian1309
 
 ## 📄 License
 
-MIT © [LICENCE](https://github.com/Marian1309/try-catch/blob/main/LICENSE)
+MIT © [LICENSE](https://github.com/Marian1309/try-catch/blob/main/LICENSE)
+
+---
+
+If you want, I can also help generate a package.json or prepare other docs!

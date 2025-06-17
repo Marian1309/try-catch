@@ -38,16 +38,25 @@ export type TryCatchOptions<E = Error> = {
   onFinally?: () => void;
 };
 
-// --- Core Async Wrapper ---
-export const tryCatch = async <T, E = Error>(
+// --- Core Async Wrapper with Selector ---
+export const tryCatch = async <T, S = T, E = Error>(
   promise: Promise<T>,
-  options?: TryCatchOptions<E>
-): Promise<Result<T, E>> => {
+  options?: TryCatchOptions<E> & {
+    /**
+     * Selector function to pick/transform the resolved data.
+     */
+    select?: (data: T) => S;
+  }
+): Promise<Result<S, E>> => {
   try {
     const data = await promise;
+    const selectedData = options?.select
+      ? options.select(data)
+      : (data as unknown as S);
+
     return {
       status: "success",
-      data,
+      data: selectedData,
       error: null,
     };
   } catch (error: unknown) {
