@@ -1,0 +1,29 @@
+{
+  "name": "@pidchashyi/try-catch",
+  "version": "1.0.0",
+  "description": "A type-safe try-catch wrapper",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "try-catch",
+    "typescript",
+    "error-handling"
+  ],
+  "author": "Marian Pidchashyi",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "typescript": "^5.0.0"
+  }
+}
