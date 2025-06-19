@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "async_hooks";
+
 /**
  * @package @pidchashyi/try-catch
  * A TypeScript utility package for elegant error handling with Result types
@@ -8,6 +10,23 @@
 // ==============================
 // Core Type Definitions
 // ==============================
+
+/**
+ * Context object for managing error reporting state across try-catch operations
+ * Used internally to prevent duplicate error reporting in nested try-catch calls
+ * @property errorReported - Indicates if an error has already been reported in the current context
+ */
+export type TryCatchContext = {
+  /** Flag indicating if an error has been reported in the current context */
+  errorReported?: boolean;
+};
+
+/**
+ * AsyncLocalStorage instance for managing try-catch context across async operations
+ * Ensures error reporting state is properly maintained in concurrent and nested operations
+ * @internal
+ */
+export const tryCatchContext = new AsyncLocalStorage<TryCatchContext>();
 
 /**
  * Represents a successful operation with data
@@ -238,6 +257,13 @@ export const tryCatchSync = <T, S = T, E = Error>(
 
   const startTime = trackPerformance ? performance.now() : 0;
 
+  // Get or initialize context
+  let context = tryCatchContext.getStore();
+  if (!context) {
+    context = { errorReported: false };
+    tryCatchContext.enterWith(context);
+  }
+
   try {
     const data = fn();
     const selectedData = select ? select(data) : (data as unknown as S);
@@ -256,8 +282,11 @@ export const tryCatchSync = <T, S = T, E = Error>(
   } catch (error: unknown) {
     const processedError = toError(error) as E;
 
-    if (logError) console.error("Error occurred:", processedError);
-    onError?.(processedError as E & Error);
+    if (!context.errorReported) {
+      if (logError) console.error("Error occurred:", processedError);
+      onError?.(processedError as E & Error);
+      context.errorReported = true;
+    }
 
     const result: Failure<E> = {
       status: "failure",
@@ -283,8 +312,7 @@ export const tryCatchSync = <T, S = T, E = Error>(
  */
 export const tryCatch = async <T, S = T, E = Error>(
   promiseFactory: Promise<T>,
-  options?: TryCatchOptions<E> & {
-    /** Optional data transformer */
+  options?: Omit<TryCatchOptions<E>, "context"> & {
     select?: (data: T) => S;
   }
 ): Promise<Result<S, E>> => {
@@ -303,6 +331,13 @@ export const tryCatch = async <T, S = T, E = Error>(
   const maxRetries = retry?.retries ?? 1;
   let attempt = 0;
   const startTime = trackPerformance ? performance.now() : 0;
+
+  // Get or initialize context automatically
+  let context = tryCatchContext.getStore();
+  if (!context) {
+    context = { errorReported: false };
+    tryCatchContext.enterWith(context);
+  }
 
   try {
     while (attempt < maxRetries) {
@@ -325,8 +360,13 @@ export const tryCatch = async <T, S = T, E = Error>(
         attempt++;
         const processedError = toError(error) as E;
 
-        if (logError) console.error("Error occurred:", processedError);
-        onError?.(processedError as E & Error);
+        if (!context.errorReported) {
+          if (logError) {
+            console.error("Error occurred:", processedError);
+          }
+          onError?.(processedError as E & Error);
+          context.errorReported = true;
+        }
 
         if (attempt >= maxRetries) {
           const result: Failure<E> = {
@@ -346,7 +386,6 @@ export const tryCatch = async <T, S = T, E = Error>(
       }
     }
 
-    // This should never be reached due to the while loop condition
     throw new Error("Unexpected retry failure");
   } catch (error: unknown) {
     const result: Failure<E> = {
@@ -388,6 +427,13 @@ export const tryCatchAll = async <T, E = Error>(
 
   const startTime = trackPerformance ? performance.now() : 0;
 
+  // Get or initialize context
+  let context = tryCatchContext.getStore();
+  if (!context) {
+    context = { errorReported: false };
+    tryCatchContext.enterWith(context);
+  }
+
   try {
     const results = await Promise.all(promises);
     const result: Success<T[]> = {
@@ -403,8 +449,12 @@ export const tryCatchAll = async <T, E = Error>(
     return result;
   } catch (error: unknown) {
     const processedError = toError(error) as E;
-    if (logError) console.error("Error occurred:", processedError);
-    onError?.(processedError as E & Error);
+
+    if (!context.errorReported) {
+      if (logError) console.error("Error occurred:", processedError);
+      onError?.(processedError as E & Error);
+      context.errorReported = true;
+    }
 
     const result: Failure<E> = {
       status: "failure",
@@ -445,6 +495,13 @@ export const tryCatchAllSafe = async <T, E = Error>(
 
   const startTime = trackPerformance ? performance.now() : 0;
 
+  // Get or initialize context
+  let context = tryCatchContext.getStore();
+  if (!context) {
+    context = { errorReported: false };
+    tryCatchContext.enterWith(context);
+  }
+
   try {
     const results = await Promise.allSettled(promises);
     const partialResults: PartialResults<T, E> = {
@@ -462,8 +519,11 @@ export const tryCatchAllSafe = async <T, E = Error>(
         const error = toError(result.reason) as E;
         partialResults.errors.push(error);
         partialResults.errorIndices.push(index);
-        if (logError) console.error(`Error at index ${index}:`, error);
-        onError?.(error as E & Error);
+        if (!context.errorReported) {
+          if (logError) console.error(`Error at index ${index}:`, error);
+          onError?.(error as E & Error);
+          context.errorReported = true;
+        }
       }
     });
 
@@ -499,8 +559,12 @@ export const tryCatchAllSafe = async <T, E = Error>(
   } catch (error: unknown) {
     // This should rarely happen as Promise.allSettled doesn't reject
     const processedError = toError(error) as E;
-    if (logError) console.error("Unexpected error:", processedError);
-    onError?.(processedError as E & Error);
+
+    if (!context.errorReported) {
+      if (logError) console.error("Unexpected error:", processedError);
+      onError?.(processedError as E & Error);
+      context.errorReported = true;
+    }
 
     const result: Failure<E> = {
       status: "failure",
