@@ -11,6 +11,10 @@
 
 /**
  * Represents a successful operation with data
+ * @property status - Always "success"
+ * @property data - The successful result data
+ * @property error - Always null
+ * @property performance - Optional execution time in seconds if performance tracking is enabled
  */
 export type Success<T> = {
   status: "success";
@@ -21,6 +25,10 @@ export type Success<T> = {
 
 /**
  * Represents a failed operation with error
+ * @property status - Always "failure"
+ * @property data - Always null
+ * @property error - The error that occurred
+ * @property performance - Optional execution time in seconds if performance tracking is enabled
  */
 export type Failure<E> = {
   status: "failure";
@@ -153,14 +161,62 @@ export const map = <T, U, E>(
 };
 
 // ==============================
+// Global Configuration
+// ==============================
+
+/**
+ * Global configuration store for try-catch operations
+ * This configuration will be merged with local options in all try-catch functions
+ * Local options take precedence over global configuration
+ * @type {Partial<TryCatchOptions>}
+ * @private
+ */
+let globalTryCatchConfig: Partial<TryCatchOptions> = {};
+
+/**
+ * Sets the global configuration for all try-catch operations
+ * This configuration will be applied to all subsequent try-catch calls
+ * Local options passed to individual try-catch calls will override these global settings
+ *
+ * @example
+ * ```typescript
+ * setGlobalTryCatchConfig({
+ *   logError: true,
+ *   performance: true,
+ *   retry: { retries: 3, delayMs: 1000 }
+ * });
+ * ```
+ *
+ * @param config - Partial configuration options to be applied globally
+ */
+export const setGlobalTryCatchConfig = (config: Partial<TryCatchOptions>) => {
+  globalTryCatchConfig = config;
+};
+
+/**
+ * Retrieves the current global try-catch configuration
+ * Useful for checking current global settings or extending them
+ *
+ * @example
+ * ```typescript
+ * const currentConfig = getGlobalTryCatchConfig();
+ * console.log(currentConfig); // View current global settings
+ * ```
+ *
+ * @returns The current global configuration object
+ */
+export const getGlobalTryCatchConfig = (): Partial<TryCatchOptions> =>
+  globalTryCatchConfig;
+
+// ==============================
 // Core Functions
 // ==============================
 
 /**
  * Synchronous try-catch wrapper
  * @param fn - Function to be executed
- * @param options - Configuration options
- * @returns Result object containing either success data or error
+ * @param options - Configuration options including performance tracking
+ * @returns Result object containing either success data or error, with optional performance timing in seconds
  */
 export const tryCatchSync = <T, S = T, E = Error>(
   fn: () => T,
@@ -169,13 +225,22 @@ export const tryCatchSync = <T, S = T, E = Error>(
     select?: (data: T) => S;
   }
 ): Result<S, E> => {
-  const startTime = options?.performance ? performance.now() : 0;
+  const globalConfig = getGlobalTryCatchConfig();
+  const mergedOptions = { ...globalConfig, ...(options || {}) };
+
+  const {
+    select,
+    logError,
+    onError,
+    onFinally,
+    performance: trackPerformance,
+  } = mergedOptions;
+
+  const startTime = trackPerformance ? performance.now() : 0;
 
   try {
     const data = fn();
-    const selectedData = options?.select
-      ? options.select(data)
-      : (data as unknown as S);
+    const selectedData = select ? select(data) : (data as unknown as S);
 
     const result: Success<S> = {
       status: "success",
@@ -183,7 +248,7 @@ export const tryCatchSync = <T, S = T, E = Error>(
       error: null,
     };
 
-    if (options?.performance) {
+    if (trackPerformance) {
       result.performance = (performance.now() - startTime) / 1000;
     }
 
@@ -191,8 +256,8 @@ export const tryCatchSync = <T, S = T, E = Error>(
   } catch (error: unknown) {
     const processedError = toError(error) as E;
 
-    if (options?.logError) console.error("Error occurred:", processedError);
-    options?.onError?.(processedError);
+    if (logError) console.error("Error occurred:", processedError);
+    onError?.(processedError as E & Error);
 
     const result: Failure<E> = {
       status: "failure",
@@ -200,21 +265,21 @@ export const tryCatchSync = <T, S = T, E = Error>(
       error: processedError,
     };
 
-    if (options?.performance) {
+    if (trackPerformance) {
       result.performance = (performance.now() - startTime) / 1000;
     }
 
     return result;
   } finally {
-    options?.onFinally?.();
+    onFinally?.();
   }
 };
 
 /**
  * Asynchronous try-catch wrapper with retry capabilities
  * @param promiseFactory - Function that returns a promise to be executed
- * @param options - Configuration options
- * @returns Result object containing either success data or error
+ * @param options - Configuration options including retry settings and performance tracking
+ * @returns Result object containing either success data or error, with optional performance timing in seconds
  */
 export const tryCatch = async <T, S = T, E = Error>(
   promiseFactory: Promise<T>,
@@ -223,6 +288,9 @@ export const tryCatch = async <T, S = T, E = Error>(
     select?: (data: T) => S;
   }
 ): Promise<Result<S, E>> => {
+  const globalConfig = getGlobalTryCatchConfig();
+  const mergedOptions = { ...globalConfig, ...(options || {}) };
+
   const {
     retry,
     select,
@@ -230,7 +298,8 @@ export const tryCatch = async <T, S = T, E = Error>(
     onError,
     onFinally,
     performance: trackPerformance,
-  } = options || {};
+  } = mergedOptions;
+
   const maxRetries = retry?.retries ?? 1;
   let attempt = 0;
   const startTime = trackPerformance ? performance.now() : 0;
@@ -257,7 +326,7 @@ export const tryCatch = async <T, S = T, E = Error>(
         const processedError = toError(error) as E;
 
         if (logError) console.error("Error occurred:", processedError);
-        onError?.(processedError);
+        onError?.(processedError as E & Error);
 
         if (attempt >= maxRetries) {
           const result: Failure<E> = {
@@ -300,18 +369,23 @@ export const tryCatch = async <T, S = T, E = Error>(
  * Executes multiple promises concurrently and returns a Result with an array of values
  * Uses fail-fast behavior - if any promise fails, the entire operation fails
  * @param promises - Array of promises to execute
- * @param options - Configuration options for error handling
+ * @param options - Configuration options for error handling and performance tracking
+ * @returns Result object containing either array of results or error, with optional performance timing in seconds
  */
 export const tryCatchAll = async <T, E = Error>(
   promises: Promise<T>[],
   options?: BaseTryCatchOptions<E>
 ): Promise<Result<T[], E>> => {
+  const globalConfig = getGlobalTryCatchConfig();
+  const mergedOptions = { ...globalConfig, ...(options || {}) };
+
   const {
     logError,
     onError,
     onFinally,
     performance: trackPerformance,
-  } = options || {};
+  } = mergedOptions;
+
   const startTime = trackPerformance ? performance.now() : 0;
 
   try {
@@ -330,7 +404,7 @@ export const tryCatchAll = async <T, E = Error>(
   } catch (error: unknown) {
     const processedError = toError(error) as E;
     if (logError) console.error("Error occurred:", processedError);
-    onError?.(processedError);
+    onError?.(processedError as E & Error);
 
     const result: Failure<E> = {
       status: "failure",
@@ -352,18 +426,23 @@ export const tryCatchAll = async <T, E = Error>(
  * Executes multiple promises concurrently and collects all results and errors
  * Uses fail-soft behavior - continues execution even if some promises fail
  * @param promises - Array of promises to execute
- * @param options - Configuration options for error handling
+ * @param options - Configuration options for error handling and performance tracking
+ * @returns Result object containing partial results or error, with optional performance timing in seconds
  */
 export const tryCatchAllSafe = async <T, E = Error>(
   promises: Promise<T>[],
   options?: BaseTryCatchOptions<E>
 ): Promise<Result<PartialResults<T, E>, E>> => {
+  const globalConfig = getGlobalTryCatchConfig();
+  const mergedOptions = { ...globalConfig, ...(options || {}) };
+
   const {
     logError,
     onError,
     onFinally,
     performance: trackPerformance,
-  } = options || {};
+  } = mergedOptions;
+
   const startTime = trackPerformance ? performance.now() : 0;
 
   try {
@@ -384,7 +463,7 @@ export const tryCatchAllSafe = async <T, E = Error>(
         partialResults.errors.push(error);
         partialResults.errorIndices.push(index);
         if (logError) console.error(`Error at index ${index}:`, error);
-        onError?.(error);
+        onError?.(error as E & Error);
       }
     });
 
@@ -421,7 +500,7 @@ export const tryCatchAllSafe = async <T, E = Error>(
     // This should rarely happen as Promise.allSettled doesn't reject
     const processedError = toError(error) as E;
     if (logError) console.error("Unexpected error:", processedError);
-    onError?.(processedError);
+    onError?.(processedError as E & Error);
 
     const result: Failure<E> = {
       status: "failure",

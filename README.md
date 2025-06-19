@@ -2,7 +2,7 @@
 
 > 🧰 Type-safe `try/catch` wrapper for async operations — returns structured `Result<T, E>` objects instead of throwing errors.
 
-Eliminate unhandled exceptions and simplify async error handling with a clean, typed interface. Features optional logging, lifecycle hooks, retry mechanisms, and full type inference.
+Eliminate unhandled exceptions and simplify async error handling with a clean, typed interface. Features optional logging, lifecycle hooks, retry mechanisms, performance tracking, and full type inference.
 
 ---
 
@@ -26,10 +26,10 @@ type Result<T, E = Error> = Success<T> | Failure<E>;
 
 ```ts
 type Success<T> = {
-  status: "success";
-  data: T;
-  error: null;
-  performance?: number;
+  status: "success"; // Always "success"
+  data: T; // The successful result data
+  error: null; // Always null
+  performance?: number; // Execution time in seconds (if enabled)
 };
 ```
 
@@ -37,10 +37,10 @@ type Success<T> = {
 
 ```ts
 type Failure<E> = {
-  status: "failure";
-  data: null;
-  error: E;
-  performance?: number;
+  status: "failure"; // Always "failure"
+  data: null; // Always null
+  error: E; // The error that occurred
+  performance?: number; // Execution time in seconds (if enabled)
 };
 ```
 
@@ -62,7 +62,7 @@ type BaseTryCatchOptions<E = Error> = {
   logError?: boolean; // Enable error logging to console
   onError?: (error: E) => void; // Custom error handler callback
   onFinally?: () => void; // Callback executed after try-catch
-  performance?: boolean; // Enable performance tracking
+  performance?: boolean; // Enable performance tracking in seconds
 };
 ```
 
@@ -92,6 +92,75 @@ type PartialResults<T, E = Error> = {
   errorIndices: number[]; // Original indices of failures
 };
 ```
+
+---
+
+## 🌍 Global Configuration
+
+The package provides utilities to set global configuration options that will be applied to all try-catch operations. Local options passed to individual try-catch calls will override these global settings.
+
+### Global Configuration Functions
+
+```ts
+setGlobalTryCatchConfig(config: Partial<TryCatchOptions>): void
+getGlobalTryCatchConfig(): Partial<TryCatchOptions>
+```
+
+### Example: Setting Global Error Handling
+
+```ts
+// @/app/layout.tsx
+import { setGlobalTryCatchConfig } from "@pidchashyi/try-catch";
+
+// Set up global error tracking for all try-catch operations
+setGlobalTryCatchConfig({
+  logError: true,
+  performance: true,
+  onError: async (error) => {
+    await trackError({
+      message: "Unhandled tryCatch error",
+      source: "global",
+      error,
+    });
+  },
+});
+
+// All subsequent try-catch calls will use these settings
+const result1 = await tryCatch(fetchData()); // Uses global config
+const result2 = await tryCatchSync(processData); // Uses global config
+
+// Local options override global settings
+const result3 = await tryCatch(fetchData(), {
+  logError: false, // Overrides global logError setting
+  onError: (err) => customErrorHandler(err), // Overrides global onError handler
+});
+```
+
+### Available Global Options
+
+The global configuration accepts all standard try-catch options:
+
+```ts
+type TryCatchOptions<E = Error> = {
+  logError?: boolean; // Enable error logging to console
+  onError?: (error: E) => void; // Global error handler
+  onFinally?: () => void; // Global cleanup function
+  performance?: boolean; // Enable performance tracking
+  retry?: {
+    // Global retry settings
+    retries: number;
+    delayMs?: number;
+  };
+};
+```
+
+### Best Practices
+
+- Set global configuration early in your application's lifecycle
+- Use global config for common error tracking/logging
+- Override global settings with local options when needed
+- Keep global handlers lightweight to avoid performance impact
+- Consider using TypeScript for better type inference
 
 ---
 
@@ -172,7 +241,7 @@ map<T, U, E>(result: Result<T, E>, fn: (value: T) => U): Result<U, E>  // Transf
 
 ## 📝 Examples
 
-### Basic Usage
+### Basic Usage with Performance Tracking
 
 ```ts
 import { tryCatch, isSuccess } from "@pidchashyi/try-catch";
@@ -182,17 +251,20 @@ const result = await tryCatch(
   {
     select: (data) => data.items,
     logError: true,
+    performance: true, // Enable performance tracking
   }
 );
 
 if (isSuccess(result)) {
   console.log("Data:", result.data);
+  console.log("Operation took:", result.performance, "seconds");
 } else {
   console.error("Error:", result.error);
+  console.log("Failed operation took:", result.performance, "seconds");
 }
 ```
 
-### With Retry Logic
+### With Retry Logic and Performance Tracking
 
 ```ts
 const result = await tryCatch(fetchWithPotentialFailure(), {
@@ -202,7 +274,7 @@ const result = await tryCatch(fetchWithPotentialFailure(), {
   },
   logError: true,
   onError: (err) => notifyUser(err),
-  performance: true,
+  performance: true, // Enable performance tracking
 });
 
 if (isSuccess(result)) {
