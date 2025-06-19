@@ -2,7 +2,7 @@
 
 > 🧰 Type-safe `try/catch` wrapper for async operations — returns structured `Result<T, E>` objects instead of throwing errors.
 
-Eliminate unhandled exceptions and simplify async error handling with a clean, typed interface. Features optional logging, lifecycle hooks, and full type inference.
+Eliminate unhandled exceptions and simplify async error handling with a clean, typed interface. Features optional logging, lifecycle hooks, retry mechanisms, and full type inference.
 
 ---
 
@@ -14,7 +14,7 @@ npm install @pidchashyi/try-catch
 
 ---
 
-## ⚙️ API Overview
+## ⚙️ Core Types
 
 ### `Result<T, E>`
 
@@ -22,111 +22,233 @@ npm install @pidchashyi/try-catch
 type Result<T, E = Error> = Success<T> | Failure<E>;
 ```
 
-- `Success<T>`: `{ status: "success"; data: T; error: null }`
-- `Failure<E>`: `{ status: "failure"; data: null; error: E }`
-
-### Type Guards
+#### Success Type
 
 ```ts
-isSuccess(result): result is Success<T>;
-isFailure(result): result is Failure<E>;
+type Success<T> = {
+  status: "success";
+  data: T;
+  error: null;
+  performance?: number;
+};
+```
+
+#### Failure Type
+
+```ts
+type Failure<E> = {
+  status: "failure";
+  data: null;
+  error: E;
+  performance?: number;
+};
+```
+
+### Configuration Types
+
+#### RetryOptions
+
+```ts
+type RetryOptions = {
+  retries: number; // Number of retry attempts
+  delayMs?: number; // Delay between retries in milliseconds
+};
+```
+
+#### BaseTryCatchOptions
+
+```ts
+type BaseTryCatchOptions<E = Error> = {
+  logError?: boolean; // Enable error logging to console
+  onError?: (error: E) => void; // Custom error handler callback
+  onFinally?: () => void; // Callback executed after try-catch
+  performance?: boolean; // Enable performance tracking
+};
+```
+
+#### TryCatchOptions
+
+```ts
+type TryCatchOptions<E = Error> = BaseTryCatchOptions<E> & {
+  retry?: RetryOptions;
+};
+```
+
+#### TryCatchAllOptions
+
+```ts
+type TryCatchAllOptions<E = Error> = BaseTryCatchOptions<E> & {
+  failFast?: boolean; // If true, fails on first error (default)
+};
+```
+
+#### PartialResults
+
+```ts
+type PartialResults<T, E = Error> = {
+  successes: T[]; // Array of successful results
+  errors: E[]; // Array of errors that occurred
+  successIndices: number[]; // Original indices of successes
+  errorIndices: number[]; // Original indices of failures
+};
 ```
 
 ---
 
-## 🔧 Usage
+## 🛠️ Core Functions
 
-### Basic Example
+### `tryCatchSync<T, S = T, E = Error>`
+
+Synchronous try-catch wrapper for non-async operations.
 
 ```ts
-import { tryCatch, isSuccess, isFailure } from "@pidchashyi/try-catch";
-
-const result = await tryCatch(
-  fetch("https://jsonplaceholder.typicode.com/users").then((res) => res.json()),
-  {
-    select: (data) => data.map((user) => user.name),
-  }
-);
-
-if (isSuccess(result)) {
-  console.log("User names:", result.data);
-} else {
-  console.error("Failed to fetch user names:", result.error);
-}
+const result = tryCatchSync(() => someOperation(), {
+  select: (data) => transformData(data),
+  logError: true,
+  onError: (err) => handleError(err),
+  onFinally: () => cleanup(),
+});
 ```
 
----
+### `tryCatch<T, S = T, E = Error>`
 
-## 🛠️ With Options
+Asynchronous try-catch wrapper with retry capabilities.
 
 ```ts
 const result = await tryCatch(fetchData(), {
+  retry: { retries: 3, delayMs: 1000 },
+  select: (data) => transformData(data),
   logError: true,
-  onError: (err) => {
-    // custom error reporting
-    reportToService(err);
-  },
-  onFinally: () => {
-    // disable loading
-    setIsLoading(false);
-  },
+  onError: (err) => handleError(err),
+  onFinally: () => cleanup(),
+});
+```
+
+### `tryCatchAll<T, E = Error>`
+
+Execute multiple promises concurrently with fail-fast behavior.
+
+```ts
+const result = await tryCatchAll([promise1, promise2, promise3], {
+  logError: true,
+  onError: (err) => handleError(err),
+  onFinally: () => cleanup(),
+});
+```
+
+### `tryCatchAllSafe<T, E = Error>`
+
+Execute multiple promises concurrently with fail-soft behavior.
+
+```ts
+const result = await tryCatchAllSafe([promise1, promise2, promise3], {
+  logError: true,
+  onError: (err) => handleError(err),
+  onFinally: () => cleanup(),
 });
 ```
 
 ---
 
-## 🧪 Type Guards
+## 🔍 Utility Functions
+
+### Type Guards
 
 ```ts
+isSuccess<T, E>(result: Result<T, E>): result is Success<T>
+isFailure<T, E>(result: Result<T, E>): result is Failure<E>
+```
+
+### Helper Functions
+
+```ts
+sleep(ms: number): Promise<void>                 // Delay execution
+toError(error: unknown): Error                   // Convert unknown to Error
+getErrorMessage(error: unknown): string          // Extract error message
+map<T, U, E>(result: Result<T, E>, fn: (value: T) => U): Result<U, E>  // Transform success value
+```
+
+---
+
+## 📝 Examples
+
+### Basic Usage
+
+```ts
+import { tryCatch, isSuccess } from "@pidchashyi/try-catch";
+
+const result = await tryCatch(
+  fetch("https://api.example.com/data").then((res) => res.json()),
+  {
+    select: (data) => data.items,
+    logError: true,
+  }
+);
+
 if (isSuccess(result)) {
-  // result.data is strongly typed and non-null
-} else if (isFailure(result)) {
-  // result.error is strongly typed and non-null
+  console.log("Data:", result.data);
+} else {
+  console.error("Error:", result.error);
+}
+```
+
+### With Retry Logic
+
+```ts
+const result = await tryCatch(fetchWithPotentialFailure(), {
+  retry: {
+    retries: 3,
+    delayMs: 1000,
+  },
+  logError: true,
+  onError: (err) => notifyUser(err),
+  performance: true,
+});
+
+if (isSuccess(result)) {
+  console.log(`Operation succeeded in ${result.performance} seconds`);
+}
+```
+
+### Parallel Operations
+
+```ts
+const result = await tryCatchAll([fetchUser(1), fetchUser(2), fetchUser(3)]);
+
+if (isSuccess(result)) {
+  console.log("All users:", result.data);
+}
+```
+
+### Safe Parallel Operations
+
+```ts
+const result = await tryCatchAllSafe([
+  fetchUser(1),
+  fetchUser(2),
+  fetchUser(3),
+]);
+
+if (isSuccess(result)) {
+  console.log("Successful fetches:", result.data.successes);
+  console.log("Failed fetches:", result.data.errors);
+  console.log("Success indices:", result.data.successIndices);
 }
 ```
 
 ---
 
-## 🧰 API Reference
+## 🛡️ Features & Benefits
 
-### `tryCatch(promise, options?)`
-
-Wraps any async function or promise and returns a typed `Result<T, E>` object.
-
-#### Parameters:
-
-| Name      | Type                                               | Description                     |
-| --------- | -------------------------------------------------- | ------------------------------- |
-| `promise` | `Promise<T>`                                       | Async operation to wrap         |
-| `options` | `TryCatchOptions<E> & { select?: (data: T) => S }` | Optional callbacks and selector |
-
-#### Returns:
-
-```ts
-Promise<Result<S, E>>;
-```
-
----
-
-### `TryCatchOptions<E>`
-
-| Option      | Type                 | Description                          |
-| ----------- | -------------------- | ------------------------------------ |
-| `logError`  | `boolean`            | Logs error to console if `true`      |
-| `onError`   | `(error: E) => void` | Optional custom error handler        |
-| `onFinally` | `() => void`         | Called regardless of success/failure |
-| `select`    | `(data: T) => S`     | Selector function to transform data  |
-
----
-
-## 🛡️ Safeguards & Features
-
-✅ Fully typed `Success<T>` / `Failure<E>`
-✅ Catches unknown errors and casts to `Error`
-✅ Optional error logger and lifecycle hooks
-✅ Helps enforce non-throwing API patterns
-❌ No global side effects
-❌ No dependency on specific frameworks
+✅ Fully typed `Success<T>` / `Failure<E>` results
+✅ Comprehensive retry mechanism
+✅ Performance tracking
+✅ Parallel execution support
+✅ Safe error handling with type inference
+✅ Optional logging and lifecycle hooks
+✅ Transform results with selectors
+✅ No dependencies
+✅ Framework agnostic
 
 ---
 
@@ -139,7 +261,3 @@ Built with safety-first philosophy by [Pidchashyi](https://github.com/Marian1309
 ## 📄 License
 
 MIT © [LICENSE](https://github.com/Marian1309/try-catch/blob/main/LICENSE)
-
----
-
-If you want, I can also help generate a package.json or prepare other docs!

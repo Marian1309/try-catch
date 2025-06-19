@@ -1,33 +1,38 @@
 {
   "name": "@pidchashyi/try-catch",
   "version": "2.0.1",
-  "description": "A type-safe try-catch wrapper",
+  "description": "A TypeScript utility package for elegant error handling with Result types",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
+  "author": "Marian Pidchashyi",
+  "license": "MIT",
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
     "postpublish": "rimraf -rf dist"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Marian1309/try-catch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Marian1309/try-catch/issues"
+  },
+  "homepage": "https://github.com/Marian1309/try-catch#readme",
   "keywords": [
-    "try-catch",
     "typescript",
-    "error-handling"
+    "error-handling",
+    "result",
+    "try-catch",
+    "retry",
+    "async",
+    "utility"
   ],
   "files": [
     "src",
     "LICENSE",
     "README.md"
   ],
-  "author": "Marian Pidchashyi",
-  "license": "MIT",
   "devDependencies": {
     "@types/node": "^24.0.3",
     "typescript": "^5.0.0"

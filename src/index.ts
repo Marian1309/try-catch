@@ -16,6 +16,7 @@ export type Success<T> = {
   status: "success";
   data: T;
   error: null;
+  performance?: number;
 };
 
 /**
@@ -25,6 +26,7 @@ export type Failure<E> = {
   status: "failure";
   data: null;
   error: E;
+  performance?: number;
 };
 
 /**
@@ -56,6 +58,8 @@ export type BaseTryCatchOptions<E = Error> = {
   onError?: (error: E) => void;
   /** Callback executed after try-catch regardless of outcome */
   onFinally?: () => void;
+  /** Enable performance tracking in seconds */
+  performance?: boolean;
 };
 
 /**
@@ -165,28 +169,42 @@ export const tryCatchSync = <T, S = T, E = Error>(
     select?: (data: T) => S;
   }
 ): Result<S, E> => {
+  const startTime = options?.performance ? performance.now() : 0;
+
   try {
     const data = fn();
     const selectedData = options?.select
       ? options.select(data)
       : (data as unknown as S);
 
-    return {
+    const result: Success<S> = {
       status: "success",
       data: selectedData,
       error: null,
     };
+
+    if (options?.performance) {
+      result.performance = (performance.now() - startTime) / 1000;
+    }
+
+    return result;
   } catch (error: unknown) {
     const processedError = toError(error) as E;
 
     if (options?.logError) console.error("Error occurred:", processedError);
     options?.onError?.(processedError);
 
-    return {
+    const result: Failure<E> = {
       status: "failure",
       data: null,
       error: processedError,
     };
+
+    if (options?.performance) {
+      result.performance = (performance.now() - startTime) / 1000;
+    }
+
+    return result;
   } finally {
     options?.onFinally?.();
   }
@@ -199,27 +217,41 @@ export const tryCatchSync = <T, S = T, E = Error>(
  * @returns Result object containing either success data or error
  */
 export const tryCatch = async <T, S = T, E = Error>(
-  promiseFactory: () => Promise<T>,
+  promiseFactory: Promise<T>,
   options?: TryCatchOptions<E> & {
     /** Optional data transformer */
     select?: (data: T) => S;
   }
 ): Promise<Result<S, E>> => {
-  const { retry, select, logError, onError, onFinally } = options || {};
+  const {
+    retry,
+    select,
+    logError,
+    onError,
+    onFinally,
+    performance: trackPerformance,
+  } = options || {};
   const maxRetries = retry?.retries ?? 1;
   let attempt = 0;
+  const startTime = trackPerformance ? performance.now() : 0;
 
   try {
     while (attempt < maxRetries) {
       try {
-        const data = await promiseFactory();
+        const data = await promiseFactory;
         const selectedData = select ? select(data) : (data as unknown as S);
 
-        return {
+        const result: Success<S> = {
           status: "success",
           data: selectedData,
           error: null,
         };
+
+        if (trackPerformance) {
+          result.performance = (performance.now() - startTime) / 1000;
+        }
+
+        return result;
       } catch (error: unknown) {
         attempt++;
         const processedError = toError(error) as E;
@@ -228,11 +260,17 @@ export const tryCatch = async <T, S = T, E = Error>(
         onError?.(processedError);
 
         if (attempt >= maxRetries) {
-          return {
+          const result: Failure<E> = {
             status: "failure",
             data: null,
             error: processedError,
           };
+
+          if (trackPerformance) {
+            result.performance = (performance.now() - startTime) / 1000;
+          }
+
+          return result;
         }
 
         if (retry?.delayMs) await sleep(retry.delayMs);
@@ -242,11 +280,17 @@ export const tryCatch = async <T, S = T, E = Error>(
     // This should never be reached due to the while loop condition
     throw new Error("Unexpected retry failure");
   } catch (error: unknown) {
-    return {
+    const result: Failure<E> = {
       status: "failure",
       data: null,
       error: toError(error) as E,
     };
+
+    if (trackPerformance) {
+      result.performance = (performance.now() - startTime) / 1000;
+    }
+
+    return result;
   } finally {
     onFinally?.();
   }
@@ -262,24 +306,43 @@ export const tryCatchAll = async <T, E = Error>(
   promises: Promise<T>[],
   options?: BaseTryCatchOptions<E>
 ): Promise<Result<T[], E>> => {
-  const { logError, onError, onFinally } = options || {};
+  const {
+    logError,
+    onError,
+    onFinally,
+    performance: trackPerformance,
+  } = options || {};
+  const startTime = trackPerformance ? performance.now() : 0;
 
   try {
     const results = await Promise.all(promises);
-    return {
+    const result: Success<T[]> = {
       status: "success",
       data: results,
       error: null,
     };
+
+    if (trackPerformance) {
+      result.performance = (performance.now() - startTime) / 1000;
+    }
+
+    return result;
   } catch (error: unknown) {
     const processedError = toError(error) as E;
     if (logError) console.error("Error occurred:", processedError);
     onError?.(processedError);
-    return {
+
+    const result: Failure<E> = {
       status: "failure",
       data: null,
       error: processedError,
     };
+
+    if (trackPerformance) {
+      result.performance = (performance.now() - startTime) / 1000;
+    }
+
+    return result;
   } finally {
     onFinally?.();
   }
@@ -295,7 +358,13 @@ export const tryCatchAllSafe = async <T, E = Error>(
   promises: Promise<T>[],
   options?: BaseTryCatchOptions<E>
 ): Promise<Result<PartialResults<T, E>, E>> => {
-  const { logError, onError, onFinally } = options || {};
+  const {
+    logError,
+    onError,
+    onFinally,
+    performance: trackPerformance,
+  } = options || {};
+  const startTime = trackPerformance ? performance.now() : 0;
 
   try {
     const results = await Promise.allSettled(promises);
@@ -321,31 +390,50 @@ export const tryCatchAllSafe = async <T, E = Error>(
 
     // If all promises failed, return failure
     if (partialResults.successes.length === 0) {
-      return {
+      const result: Failure<E> = {
         status: "failure",
         data: null,
         error: new Error(
           `All ${partialResults.errors.length} promises failed`
         ) as E,
       };
+
+      if (trackPerformance) {
+        result.performance = (performance.now() - startTime) / 1000;
+      }
+
+      return result;
     }
 
     // Return partial results if at least one promise succeeded
-    return {
+    const result: Success<PartialResults<T, E>> = {
       status: "success",
       data: partialResults,
       error: null,
     };
+
+    if (trackPerformance) {
+      result.performance = (performance.now() - startTime) / 1000;
+    }
+
+    return result;
   } catch (error: unknown) {
     // This should rarely happen as Promise.allSettled doesn't reject
     const processedError = toError(error) as E;
     if (logError) console.error("Unexpected error:", processedError);
     onError?.(processedError);
-    return {
+
+    const result: Failure<E> = {
       status: "failure",
       data: null,
       error: processedError,
     };
+
+    if (trackPerformance) {
+      result.performance = (performance.now() - startTime) / 1000;
+    }
+
+    return result;
   } finally {
     onFinally?.();
   }
