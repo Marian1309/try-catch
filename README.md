@@ -22,21 +22,6 @@ npm install @pidchashyi/try-catch
 type Result<T, E = Error> = Success<T> | Failure<E>;
 ```
 
-### `TryCatchContext`
-
-```ts
-type TryCatchContext = {
-  errorReported?: boolean; // Flag indicating if an error has been reported
-};
-```
-
-The `TryCatchContext` is managed internally using `AsyncLocalStorage` to prevent duplicate error reporting in nested and concurrent try-catch operations. This ensures that error handlers and loggers are called exactly once for each error, even in complex async scenarios.
-
-```ts
-// Internal implementation detail
-const tryCatchContext = new AsyncLocalStorage<TryCatchContext>();
-```
-
 #### Success Type
 
 ```ts
