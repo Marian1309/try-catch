@@ -194,12 +194,12 @@ export const tryCatchSync = <T, S = T, E = Error>(
 
 /**
  * Asynchronous try-catch wrapper with retry capabilities
- * @param promiseFactory - Promise to be executed
+ * @param promiseFactory - Function that returns a promise to be executed
  * @param options - Configuration options
  * @returns Result object containing either success data or error
  */
 export const tryCatch = async <T, S = T, E = Error>(
-  promiseFactory: Promise<T>,
+  promiseFactory: () => Promise<T>,
   options?: TryCatchOptions<E> & {
     /** Optional data transformer */
     select?: (data: T) => S;
@@ -212,7 +212,7 @@ export const tryCatch = async <T, S = T, E = Error>(
   try {
     while (attempt < maxRetries) {
       try {
-        const data = await promiseFactory;
+        const data = await promiseFactory();
         const selectedData = select ? select(data) : (data as unknown as S);
 
         return {

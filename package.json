@@ -1,6 +1,6 @@
 {
   "name": "@pidchashyi/try-catch",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A type-safe try-catch wrapper",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,6 +20,11 @@
     "try-catch",
     "typescript",
     "error-handling"
+  ],
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
   ],
   "author": "Marian Pidchashyi",
   "license": "MIT",
