@@ -2,23 +2,6 @@
   "name": "@pidchashyi/try-catch",
   "version": "2.1.0",
   "description": "A TypeScript utility package for elegant error handling with Result types",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "author": "Marian Pidchashyi",
-  "license": "MIT",
-  "scripts": {
-    "build": "tsc",
-    "prepare": "npm run build",
-    "postpublish": "rimraf -rf dist"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Marian1309/try-catch.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Marian1309/try-catch/issues"
-  },
-  "homepage": "https://github.com/Marian1309/try-catch#readme",
   "keywords": [
     "typescript",
     "error-handling",
@@ -28,11 +11,28 @@
     "async",
     "utility"
   ],
+  "homepage": "https://github.com/Marian1309/try-catch#readme",
+  "bugs": {
+    "url": "https://github.com/Marian1309/try-catch/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Marian1309/try-catch.git"
+  },
+  "license": "MIT",
+  "author": "Marian Pidchashyi",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
     "src",
     "LICENSE",
     "README.md"
   ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "postpublish": "rimraf -rf dist"
+  },
   "devDependencies": {
     "@types/node": "^24.0.3",
     "typescript": "^5.0.0"
